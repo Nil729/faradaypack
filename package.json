@@ -1,0 +1,14 @@
+{
+  "name": "faradaypack",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Landing B2B Faraday Pack: bolsas ESD, antiestáticas y embalaje para componentes electrónicos.",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

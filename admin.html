@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leads | Faraday Pack</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="tape"></div>
+  <main class="wrap section">
+    <h1>Bandeja de leads</h1>
+    <p class="lead">Clave de acceso (variable <code>LEADS_KEY</code>). Los datos viven en <code>data/leads.jsonl</code>.</p>
+    <form id="gate" class="panel" style="max-width:420px">
+      <label for="key">Clave</label>
+      <input id="key" type="password" autocomplete="current-password">
+      <p><button class="btn btn-primary" type="submit">Cargar</button></p>
+    </form>
+    <div class="table-wrap" style="margin-top:24px">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Empresa</th>
+            <th>Contacto</th>
+            <th>Producto</th>
+            <th>Volumen</th>
+            <th>UTM</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </main>
+  <script>
+    document.getElementById("gate").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const key = document.getElementById("key").value;
+      const res = await fetch("/api/leads?key=" + encodeURIComponent(key));
+      if (!res.ok) {
+        alert("Clave incorrecta");
+        return;
+      }
+      const leads = await res.json();
+      document.getElementById("rows").innerHTML = leads.reverse().map((l) => `
+        <tr>
+          <td>${l.createdAt || ""}</td>
+          <td>${l.empresa || ""} ${l.cif ? "(" + l.cif + ")" : ""}<br><small>${l.provincia || ""}</small></td>
+          <td>${l.nombre} · ${l.cargo || ""}<br>${l.email}<br>${l.telefono}</td>
+          <td>${l.producto}<br>${l.medidas || ""}</td>
+          <td>${l.volumen}<br>${l.urgencia || ""}</td>
+          <td>${l.utm_source || "directo"} / ${l.utm_campaign || "-"}</td>
+        </tr>
+      `).join("");
+    });
+  </script>
+</body>
+</html>
