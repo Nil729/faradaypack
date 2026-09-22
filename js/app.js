@@ -1,20 +1,19 @@
 const TICKER_ITEMS = [
-  "Sobres.es rosa ZIP · desde 0,12 €/ud",
-  "RAJAPACK pack 500 · 87,25 €",
-  "Unite 100×150 · 0,33 €/ud",
-  "Bürklin shielding 200×150 ×100 · 17,06 €",
-  "Bürklin 255×200 ×100 · 29,64 €",
-  "RAJAPACK metalizada ×100 · 44,85 €",
-  "RS PRO negras pack 10 · 20,80 €",
-  "Protektive Pak 255×305 ×100 · 35,70 €",
-  "IEC 61340-5-1 · ANSI/ESD S20.20"
+  "Bolsas antiestáticas rosa ZIP · desde 0,11 €/ud",
+  "Shielding 150×200 · desde 0,19 €/ud",
+  "Conductoras negras · desde 0,25 €/ud",
+  "MBB / barrera de humedad · desde 0,32 €/ud",
+  "Pack de muestras · 49 €",
+  "Pymes y gran cuenta · atención personalizada",
+  "IEC 61340-5-1 · ANSI/ESD S20.20",
+  "Salida desde Barcelona"
 ];
 
 const PRICE_TIERS = {
-  rosa: { 500: 0.16, 1000: 0.13, 5000: 0.10, 10000: 0.085, market: 0.175 },
-  shielding: { 500: 0.28, 1000: 0.16, 5000: 0.13, 10000: 0.11, market: 0.30 },
-  negras: { 500: 0.32, 1000: 0.26, 5000: 0.22, 10000: 0.18, market: 0.38 },
-  mbb: { 500: 0.42, 1000: 0.34, 5000: 0.28, 10000: 0.24, market: 0.43 }
+  rosa: { 250: 0.22, 500: 0.19, 1000: 0.16, 5000: 0.13, 10000: 0.11 },
+  shielding: { 250: 0.36, 500: 0.32, 1000: 0.26, 5000: 0.22, 10000: 0.19 },
+  negras: { 250: 0.48, 500: 0.42, 1000: 0.35, 5000: 0.29, 10000: 0.25 },
+  mbb: { 250: 0.58, 500: 0.52, 1000: 0.44, 5000: 0.36, 10000: 0.32 }
 };
 
 function unitPrice(family, qty) {
@@ -22,7 +21,8 @@ function unitPrice(family, qty) {
   if (qty >= 10000) return t[10000];
   if (qty >= 5000) return t[5000];
   if (qty >= 1000) return t[1000];
-  return t[500];
+  if (qty >= 500) return t[500];
+  return t[250];
 }
 
 function euro(n) {
@@ -58,10 +58,7 @@ function applyLang(lang) {
 function initTicker() {
   const track = document.getElementById("ticker");
   if (!track) return;
-  const loop = [...TICKER_ITEMS, ...TICKER_ITEMS]
-    .map((t) => `<span><b>ESD</b> ${t}</span>`)
-    .join("");
-  track.innerHTML = loop;
+  track.innerHTML = TICKER_ITEMS.map((t) => `<span>${t}</span>`).join("");
 }
 
 function initCalc() {
@@ -73,17 +70,13 @@ function initCalc() {
   if (!product) return;
 
   const render = () => {
-    const n = Math.max(500, Number(qty.value) || 500);
+    const n = Math.max(250, Number(qty.value) || 250);
     qty.value = n;
     const u = unitPrice(product.value, n);
-    const market = PRICE_TIERS[product.value].market * n;
     const ours = u * n;
     total.textContent = euro(ours);
     unit.textContent = `${euro(u)} / ud`;
-    const save = market - ours;
-    compare.textContent = save > 0
-      ? `Frente a una referencia de mercado de ${euro(market)}, el test Faraday Pack ahorra ~${euro(save)} en este volumen.`
-      : "Ajuste el volumen para ver el gap frente a canal industrial.";
+    compare.textContent = "Sin IVA ni portes. Confirmamos tarifa según medida, stock y cadencia de entrega.";
   };
 
   product.addEventListener("change", render);
@@ -91,10 +84,37 @@ function initCalc() {
   render();
 }
 
+function t(key, fallback) {
+  const lang = document.documentElement.lang || "es";
+  return (I18N[lang] && I18N[lang][key]) || fallback;
+}
+
+function inboxAddress() {
+  return ["nil.pinyana", "gmail.com"].join("@");
+}
+
+function proofFromTimestamp(ts) {
+  return String((Number(ts) % 997) + 17);
+}
+
 function initForm() {
   const form = document.getElementById("lead-form");
   const status = document.getElementById("form-status");
+  const submit = document.getElementById("lead-submit");
   if (!form) return;
+  const started = Date.now();
+  const tsField = document.getElementById("form_ts");
+  const jsField = document.getElementById("fp_js");
+  const checkField = document.getElementById("fp_check");
+  if (tsField) tsField.value = String(started);
+  if (jsField) jsField.value = "1";
+  if (checkField) checkField.value = proofFromTimestamp(started);
+
+  const arm = () => {
+    if (Date.now() - started >= 4000 && submit) submit.disabled = false;
+  };
+  setTimeout(arm, 4000);
+  form.addEventListener("input", arm, { once: true });
 
   document.querySelectorAll("[data-product]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -107,10 +127,27 @@ function initForm() {
     event.preventDefault();
     status.className = "form-status";
     status.textContent = "Enviando...";
+    if (submit) submit.disabled = true;
+
+    const honey = ["website", "fax", "_honey"]
+      .map((name) => (form.elements[name]?.value || "").trim())
+      .some(Boolean);
+    if (honey) {
+      location.href = "gracias.html";
+      return;
+    }
+
+    if (Date.now() - started < 4000) {
+      status.className = "form-status err";
+      status.textContent = t("form.wait", "Espere un instante y vuelva a enviar.");
+      if (submit) submit.disabled = false;
+      return;
+    }
 
     if (!form.reportValidity()) {
       status.className = "form-status err";
       status.textContent = "Revise los campos obligatorios.";
+      if (submit) submit.disabled = false;
       return;
     }
 
@@ -120,24 +157,48 @@ function initForm() {
     data.createdAt = new Date().toISOString();
     data.personalEmail = /@(gmail|hotmail|outlook|yahoo|icloud)\./i.test(data.email);
 
+    const replyto = document.getElementById("lead-replyto");
+    if (replyto) replyto.value = data.email || inboxAddress();
+    const subject = form.querySelector("[name=_subject]");
+    if (subject) {
+      subject.value = `Nueva solicitud Faraday Pack: ${data.empresa || ""} · ${data.producto || ""}`;
+    }
+
     try {
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
       });
-      if (!res.ok) throw new Error("fail");
-      window.dataLayer = window.dataLayer || [];
-      window.dataLayer.push({ event: "generate_lead", product: data.producto, volumen: data.volumen });
-      location.href = "gracias.html";
+      const result = await res.json().catch(() => ({}));
+      if (result.dropped) {
+        location.href = "gracias.html";
+        return;
+      }
+      if (res.status === 429) {
+        status.className = "form-status err";
+        status.textContent = t("form.wait", "Espere un instante y vuelva a enviar.");
+        if (submit) submit.disabled = false;
+        return;
+      }
+      if (res.status === 403) {
+        status.className = "form-status err";
+        status.textContent = t("form.spam", "No hemos podido enviar la solicitud. Pruebe de nuevo o escriba a nil.pinyana@gmail.com.");
+        if (submit) submit.disabled = false;
+        return;
+      }
     } catch {
-      const backup = JSON.parse(localStorage.getItem("fp-leads") || "[]");
-      backup.push(data);
-      localStorage.setItem("fp-leads", JSON.stringify(backup));
-      status.className = "form-status ok";
-      status.textContent = "Solicitud guardada en este navegador. Le redirigimos a la confirmación.";
-      setTimeout(() => { location.href = "gracias.html"; }, 700);
+      /* el correo sale por FormSubmit aunque la API falle */
     }
+
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event: "generate_lead", product: data.producto, volumen: data.volumen });
+    ["website", "fax", "_honey", "form_ts", "fp_js", "fp_check"].forEach((name) => {
+      const el = form.elements[name];
+      if (el) el.disabled = true;
+    });
+    form.action = "https://formsubmit.co/" + inboxAddress();
+    form.submit();
   });
 }
 

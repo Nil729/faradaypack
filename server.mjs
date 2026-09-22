@@ -3,12 +3,19 @@ import { createReadStream, existsSync } from "node:fs";
 import { mkdir, appendFile, readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildLead, isValidLead, notifyLead } from "./lib/leads.mjs";
+import {
+  assessSpam,
+  clientIp,
+  isAllowedBrowser,
+  publicLead,
+  rateLimitOk
+} from "./lib/spam.mjs";
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const PORT = Number(process.env.PORT || 4173);
 const LEADS_KEY = process.env.LEADS_KEY || "faraday-dev";
 const LEADS_FILE = join(ROOT, "data", "leads.jsonl");
-const WEBHOOK = process.env.NOTIFY_WEBHOOK || "";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -27,32 +34,12 @@ function send(res, status, body, type = "application/json; charset=utf-8") {
   res.end(body);
 }
 
-function isValidLead(data) {
-  return data
-    && typeof data.nombre === "string" && data.nombre.trim().length > 1
-    && typeof data.empresa === "string" && data.empresa.trim().length > 1
-    && typeof data.email === "string" && /.+@.+\..+/.test(data.email)
-    && typeof data.telefono === "string" && data.telefono.replace(/\D/g, "").length >= 9
-    && data.gdpr;
-}
-
-async function saveLead(data) {
+async function saveLead(data, ip) {
   await mkdir(join(ROOT, "data"), { recursive: true });
-  const row = {
-    ...data,
-    id: `fp_${Date.now()}`,
-    ip: data.ip,
-    createdAt: data.createdAt || new Date().toISOString()
-  };
+  const row = buildLead(publicLead(data), ip);
   await appendFile(LEADS_FILE, `${JSON.stringify(row)}\n`, "utf8");
-  if (WEBHOOK) {
-    await fetch(WEBHOOK, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(row)
-    }).catch(() => {});
-  }
-  return row;
+  const notify = await notifyLead(row);
+  return { ...row, emailed: notify.emailed };
 }
 
 function serveStatic(req, res) {
@@ -82,13 +69,30 @@ const server = createServer(async (req, res) => {
       send(res, 400, JSON.stringify({ ok: false, error: "JSON inválido" }));
       return;
     }
+    if (!isAllowedBrowser(req)) {
+      send(res, 403, JSON.stringify({ ok: false, error: "Origen no permitido" }));
+      return;
+    }
+    const ip = clientIp(req);
+    const spam = assessSpam(data);
+    if (spam.silent) {
+      send(res, 201, JSON.stringify({ ok: true, dropped: true }));
+      return;
+    }
+    if (!spam.ok) {
+      send(res, spam.reason === "too_fast" ? 429 : 403, JSON.stringify({ ok: false, error: spam.reason }));
+      return;
+    }
+    if (!rateLimitOk(ip)) {
+      send(res, 429, JSON.stringify({ ok: false, error: "rate" }));
+      return;
+    }
     if (!isValidLead(data)) {
       send(res, 422, JSON.stringify({ ok: false, error: "Faltan datos de contacto" }));
       return;
     }
-    data.ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").toString();
-    const saved = await saveLead(data);
-    send(res, 201, JSON.stringify({ ok: true, id: saved.id }));
+    const saved = await saveLead(data, ip);
+    send(res, 201, JSON.stringify({ ok: true, id: saved.id, emailed: Boolean(saved.emailed) }));
     return;
   }
 

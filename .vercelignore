@@ -1,0 +1,7 @@
+.vercel
+server.mjs
+data
+.env
+.env.*
+README.md
+.git
